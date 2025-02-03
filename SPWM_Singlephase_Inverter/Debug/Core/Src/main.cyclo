@@ -1,0 +1,11 @@
+../Core/Src/main.c:31:5:main	25
+../Core/Src/main.c:180:6:TIM1_UP_IRQHandler	6
+../Core/Src/main.c:237:6:FLASHCONFIG	2
+../Core/Src/main.c:245:6:CLOCK	4
+../Core/Src/main.c:261:6:WATCHDOG	1
+../Core/Src/main.c:269:6:POWER	2
+../Core/Src/main.c:276:6:GPIO	1
+../Core/Src/main.c:296:6:ADC	1
+../Core/Src/main.c:316:6:PWM	1
+../Core/Src/main.c:332:6:TIM1Interrupt	1
+../Core/Src/main.c:340:6:UART	1
