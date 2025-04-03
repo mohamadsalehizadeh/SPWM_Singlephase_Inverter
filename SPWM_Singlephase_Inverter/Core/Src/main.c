@@ -1,20 +1,16 @@
+
 #include "stm32f1xx.h"
 #include "main.h"
-// single-phase inverter using unipolar SPWM based on the VFD method to drive single-phase induction motor
+
 int overvoltagecounter=0  ;  // count up each 25ms
 int overcurrentcounter=0  ;  // count up each 200us
-
 int counter=0  ;   // count up each 50us
 int tempcounter=0  ;   //    count up each second under a specified condition
-int packetcounter=0  ;  //   count up to define which uart packet should be sent
 int onesecondcounter=0    ;  // count up each 25ms to create one second (40*25ms)
+int countertwo=0 ;
 unsigned char uartpacket[8] ;
-int pressurecontrolcounter=0 ;
-int pressure=0 ;
-int refpressure=1638 ;     // 3bar = reference pressure in bar unit
+int packetcounter=0  ;  //   count up to define which uart packet should be sent
 int error ;
-int error1 ;
-int integrator1=0 ;
 int phasecounterpeak ;
 int integrator=0 ;
 int D ;
@@ -39,139 +35,125 @@ int main(void)
         PWM() ;
         TIM1Interrupt()  ;
         ADC()   ;
-        UART()   ;
+        UART()  ;
 
 
 while(1)
 {
 	WWDG->CR = (1 << 6) | (1 << 7) | 63 ;    //  enable watchdog, set T6 to avoid immediate reset(read reference manual)
 
-
-
-    if(pressurecontrolcounter >= 500)        //    the frequency is defined each 500*50us = 25ms
-     	     				{
+    if(countertwo >= 500)        //    the frequency is defined each 500*50us = 25ms
+     	   {
          onesecondcounter=onesecondcounter+1  ;
-         pressurecontrolcounter=0 ;
-         error1=refpressure-pressure  ;
-          integrator1=integrator1 + error1 >> 4  ;  //  PI controller , Ki = 0.0625
-          frequency=error1/10000 + integrator1 ;     //   create frequency  ,     //  pressure PI Controller proportional coefficient Kp = 0.0001
-         if (frequency > 50)
-             {
-               frequency=50 ;
-             }
-         if (frequency < 1)
-            {
-            frequency=1 ;
-            }
-          if(vlinkdc > 3230)      //        dclink voltage value is more than approximately 350V
-             {
-             overvoltagecounter=overvoltagecounter+1 ;
-            	if(overvoltagecounter >= 2)
-            	{
-            	overvoltagecounter=0   ;
-             	GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 25ms
+         countertwo=0 ;
+
+     if(vlinkdc > 3230)      //        dclink voltage value is more than approximately 350V
+       {
+      overvoltagecounter=overvoltagecounter+1 ;
+       	if(overvoltagecounter >= 2)
+        	{     overvoltagecounter=0   ;
+           GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 25ms
+           GPIOA->BSRR = (1 << 4);         //      turn on RED LED
+           }
+        }
+         if(vlinkdc > 3090)             //        dclink voltage value is more than approximately 335V
+          {
+        	overvoltagecounter=overvoltagecounter+1 ;
+              	if(overvoltagecounter >= 4)
+              	{     overvoltagecounter=0   ;
+              	GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 3*25ms
             	GPIOA->BSRR = (1 << 4);         //      turn on RED LED
             	}
-                }
-            if(vlinkdc > 3090)             //        dclink voltage value is more than approximately 335V
-                {
-            	overvoltagecounter=overvoltagecounter+1 ;
-            	if(overvoltagecounter >= 4)
-            	{     overvoltagecounter=0   ;
-            		GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 3*25ms
-            		GPIOA->BSRR = (1 << 4);         //      turn on RED LED
-            		}
-            		}
+           }
 
-            if(vlinkdc < 3025 )             //        dclink voltage value is less than approximately 325V
-            	{
+           if(vlinkdc < 3025)             //        dclink voltage value is less than approximately 325V
+          	{
 
-            	 	GPIOA->BSRR = (1 << 23);         //      deactivate shutdown pin of the mosfet drivers because protection is not necessary
-            		GPIOA->BSRR = (1 << 20);         //      turn off RED LED
-            		}
-
-               if(onesecondcounter >= 40)
+             	GPIOA->BSRR = (1 << 23);         //      deactivate shutdown pin of the mosfet drivers because protection is not necessary
+            	GPIOA->BSRR = (1 << 20);         //      turn off RED LED
+            }
+           if(onesecondcounter >= 40)
                {
-            	   onesecondcounter=0 ;
-            	   uartpacket[0] = (ADC2->JDR2*424/4095) ;
-                   uartpacket[1] = (ADC2->JDR2*424/4095) >> 8 ;
-                   uartpacket[2] = ADC1->JDR2*100 ;
-                   uartpacket[3] = (ADC1->JDR2*100) >> 8 ;
-                   uartpacket[4] = ADC2->JDR1 ;
-                   uartpacket[5] = (ADC2->JDR1) >> 8 ;
-                   uartpacket[6] = frequency*10 ;
-                   uartpacket[7] = (frequency*10) >> 8 ;
-                    packetcounter=0 ;
-                    if(heatsinktemperature > 2800)         //   temperature less than about 55C
-                    {
-                		GPIOC->BSRR = (1 << 29) ;    //     turn off Fan
+               onesecondcounter=0 ;
+        	   uartpacket[0] = ADC2->JDR2 ;
+               uartpacket[1] = ADC2->JDR2 >> 8 ;
+               uartpacket[2] = ADC1->JDR2 ;
+               uartpacket[3] = ADC1->JDR2 >> 8 ;
+               uartpacket[4] = frequency*10 ;
+               uartpacket[5] = (frequency*10) >> 8 ;
+               uartpacket[6] = 45 ;
+               uartpacket[7] = 45 ;
+                packetcounter=0 ;
+               if(heatsinktemperature > 2800)         //   temperature less than about 55C
+               {
+               GPIOC->BSRR = (1 << 29) ;    //     turn off Fan
+                 }
+
+                if(heatsinktemperature < 2700 && heatsinktemperature > 2500)           //   temperature less than about 75C and more than 60C
+                {
+                tempcounter=tempcounter+1 ;
+                 if(tempcounter >= 16)
+                 	{     tempcounter=0   ;
+                  	GPIOC->BSRR = (1 << 13) ;    //    if temperature less than about 75C and more than 60C after 15 second turn on Fan
+                	}
+                  }
+
+                  if(heatsinktemperature < 2350)           //   temperature more than 85C
+                   {
+                    tempcounter=tempcounter+1 ;
+                     if(tempcounter >= 4)
+                      	{
+                    	 tempcounter=0   ;
+                         GPIOA->BSRR = (1 << 7);         //     if temperature more than 85C after 3 second shutdown the mosfet drivers after 3 second
+                         	}
+                         }
+
+                 if(heatsinktemperature > 2700)    //   temperature less than about 60C
+                   {
+                   GPIOA->BSRR = (1 << 23);         //      deactivate shutdown pin of the mosfet drivers because protection is not necessary
+
                     }
+                     }
+        	        }
+                       if(packetcounter < 8)
+                      {
+                      	 USART3->DR=uartpacket[packetcounter]   ;     //  put data in usart3 to transmit
+                         while(!(USART3->SR & 1 << 6)) ;        //   wait for transmission complete
+                          packetcounter=packetcounter+1  ;
 
-                    if(heatsinktemperature < 2700 && heatsinktemperature > 2500)           //   temperature less than about 75C and more than 60C
-                 	 {
-                    	tempcounter=tempcounter+1 ;
-                    	if(tempcounter >= 16)
-                    	{     tempcounter=0   ;
-                		  	GPIOC->BSRR = (1 << 13) ;    //    if temperature less than about 75C and more than 60C after 15 second turn on Fan
-                    	}
-                    }
+                        }
+    if(counter >= 4)
+    {
+      counter=0 ;
+        if(ilinkdc > 2457)               //        dclink overcurrent , dclink peak current value is more than 19.8A
+             	{
+      	 overcurrentcounter=overcurrentcounter+1  ;
+         if(overcurrentcounter >= 2)
+          {
+          overcurrentcounter=0   ;
+          GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 200us
+          	GPIOA->BSRR = (1 << 2) ;    //     turn on YELLOW LED
+           	 }
+       	}
 
-                    if(heatsinktemperature < 2350)           //   temperature more than 85C
-                   	 {
-                      	tempcounter=tempcounter+1 ;
-                      	if(tempcounter >= 4)
-                      	{     tempcounter=0   ;
-                      	GPIOA->BSRR = (1 << 7);         //     if temperature more than 85C after 3 second shutdown the mosfet drivers after 3 second
-                      	}
-                      }
+           if(ilinkdc > 2180)               //        dclink overcurrent , dclink peak current value is more than 17.5A peakcurrent
+        	{
+       	 overcurrentcounter=overcurrentcounter+1  ;
+        	 if(overcurrentcounter >= 4)
+                 {
+          	 overcurrentcounter=0   ;
+             	GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 3*200us
+             	GPIOA->BSRR = (1 << 2) ;    //     turn on YELLOW LED
+                 	}
+              	}
 
-                    if(heatsinktemperature > 2700)    //   temperature less than about 60C
-                    {
-                		GPIOA->BSRR = (1 << 23);         //      deactivate shutdown pin of the mosfet drivers because protection is not necessary
+                 if(ilinkdc < 2048)               //         dclink peak current value less than 16.5A
+               	{
 
-                    }
-                                      }
-     	     				}
-                   if(packetcounter < 8)
-                     {
-                     	 USART3->DR=uartpacket[packetcounter]   ;     //  put data in usart3 to transmit
-                        while(!(USART3->SR & 1 << 6)) ;        //   wait for transmission complete
-                         packetcounter=packetcounter+1  ;
-
-                       }
-                        if(counter >= 4)
-                         {
-                         counter=0 ;
-                          if(ilinkdc > 2457)               //        dclink overcurrent , dclink peak current value is more than 19.8A
-                         {
-                            overcurrentcounter=overcurrentcounter+1  ;
-                           if(overcurrentcounter >= 2)
-                           {
-                              overcurrentcounter=0   ;
-                             GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 200us
-                            GPIOA->BSRR = (1 << 2) ;    //     turn on YELLOW LED
-                            }
-                            	}
-
-                             if(ilinkdc > 2180)               //        dclink overcurrent , dclink peak current value is more than 17.5A peakcurrent
-                              	{
-                                   overcurrentcounter=overcurrentcounter+1  ;
-                                 if(overcurrentcounter >= 4)
-                                    {
-                                      	 overcurrentcounter=0   ;
-                                       	GPIOA->BSRR = (1 << 7);         //      shutdown the mosfet drivers after 3*200us
-                                       	GPIOA->BSRR = (1 << 2) ;    //     turn on YELLOW LED
-                                    }
-                                    }
-
-                               if(ilinkdc < 2048)               //         dclink peak current value less than 16.5A
-                               	{
-                                 GPIOA->BSRR = (1 << 23);         //      deactivate shutdown pin of the mosfet drivers because protection is not necessary
-                                 GPIOA->BSRR = (1 << 18) ;    //     turn off YELLOW LED
-                                 }
-                               }
-
-
+             GPIOA->BSRR = (1 << 23);         //      deactivate shutdown pin of the mosfet drivers because protection is not necessary
+             GPIOA->BSRR = (1 << 18) ;    //     turn off YELLOW LED
+            	}
+               }
 }
 
 }
@@ -182,25 +164,27 @@ void TIM1_UP_IRQHandler(void)
 	 TIM1->SR = 0 ;       //  clear Update interrupt flag
 	 GPIOA->BSRR = (1 << 3);           //   trig on GREEN LED to define the runtime of program
 
+
+
     phasecounterpeak=invfrequency/frequency ;
 
     if(phasecounter >= phasecounterpeak)
-    	{
-    	phasecounter=0 ;
-    	}
-
-    pressurecontrolcounter=pressurecontrolcounter+1;
-    counter=counter+1   ;
+    	     				{
+    	     					phasecounter=0 ;
+    	     				}
  	phasecounter=phasecounter+1 ;
+ 	countertwo=countertwo+1;
+ 	    counter=counter+1   ;
  	 ADC1->CR2 |= 1 << 21 ;       //    ADC1 software trigger
  	 ADC2->CR2 |= 1 << 21;         //    ADC2 software trigger
    voutsense = ADC1->JDR1-2048 ;
-   pressure = ADC2->JDR1 ;   //  in Bar unit
+   frequency = ADC2->JDR1*50/4095 ;   //  in Hertz, based on the nominal frequency 50Hz
 
    ilinkdc = ADC1->JDR2 ;      //   assume when ilinkdc is 33A, ADC pin is 3.3V
    vlinkdc = ADC2->JDR2 ;    //   assume when vlinkdc is 300*sqrt(2) Volt, ADC pin is 3.3V
 
-   heatsinktemperature = ADC2->JDR3 ;       //   in ADC value format
+   heatsinktemperature= ADC2->JDR3 ;       //   in ADC value format
+
 
 
   		       phase=phasecounter*360*frequency/invfrequency  ;
@@ -266,12 +250,15 @@ void WATCHDOG(void)
 }
 
 
-void POWER(void)
-{
-        PWR->CR = (9 << 4) ;    //PVD ENABLE - PVD LEVEL is 2.6V
-        while(PWR->CSR & 1 << 2) ;   //   wait if power voltage lower than 2.6V
 
-}
+	void POWER(void)
+	{
+	        PWR->CR = (9 << 4) ;    //PVD ENABLE - PVD LEVEL is 2.6V
+	        while(PWR->CSR & 1 << 2) ;   //   wait if power voltage lower than 2.6V
+
+	}
+
+
 
 void GPIO(void)
 {
@@ -308,7 +295,7 @@ void ADC(void)
    ADC1->JSQR = 1 << 20 | 1 << 10 | 6 << 15 ;   //   set the length of conversion = 2 ,  set sequence  ch1, ch6
    ADC2->JSQR = 2 << 20 | 8 << 5 | 5 << 10 | 0 << 15 ;   //   set the length of conversion = 3 ,  set sequence  ch8, ch5 , ch0
    ADC1->CR2 |= 1 << 21 ;       //    ADC1 software trigger
-    	 		ADC2->CR2 |= 1 << 21;         //    ADC2 software trigger
+    ADC2->CR2 |= 1 << 21;         //    ADC2 software trigger
 
 }
 
@@ -336,7 +323,6 @@ void TIM1Interrupt(void)
     NVIC->IP[25]= 7 ;                  // set 7th priority for update event interrupt of timer 1
 }
 
-
 void UART(void)
 {
 	USART3->CR1 = 1 << 13    ;                          //   enable USART3
@@ -345,5 +331,3 @@ void UART(void)
 	USART3->CR1 |= 1 << 3    ;                     //   enable transmitter
 
 }
-
-
